@@ -19,7 +19,21 @@ GitHub: ohamlab-plugin
               +-- Task history
               +-- Persistent data
 ```
-
+## Harness
+```
+DeepSeek Harness
+       |
+       | MCP
+       v
+ohamlab-plugin (Hugging Face Space)
+       |
+       +-- Web search
+       +-- Web fetch
+       +-- Browser automation
+       +-- Autonomous task execution
+       +-- Saved sessions
+       +-- Website monitoring
+```
 ## 1. Objective
 
 Build a modular, MCP-compatible agent service
