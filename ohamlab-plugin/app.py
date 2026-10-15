@@ -289,8 +289,16 @@ with gr.Blocks(title="OhamLab Plugin") as demo:
 # IMPORTANT:
 # Register FastAPI routes and mount MCP before mounting Gradio at "/".
 # Gradio must be mounted last to avoid intercepting /health and API routes.
+from fastapi.responses import RedirectResponse
+
+# Keep the API endpoints separate from the Gradio UI.
+@app.get("/", include_in_schema=False)
+async def root():
+    return RedirectResponse(url="/ui")
+
+# Mount Gradio under /ui, not at the root.
 app = gr.mount_gradio_app(
     app,
     demo,
-    path="/",
+    path="/ui",
 )
