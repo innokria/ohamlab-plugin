@@ -13,7 +13,11 @@ from mcp_server.server import mcp
 from mcp_server.tools.search import search_and_fetch
 from browser.automation import fetch_page
 from storage.bucket import store
+import inspect
+from mcp.server.transport_security import TransportSecuritySettings
 
+print(inspect.signature(TransportSecuritySettings))
+print(inspect.signature(mcp.streamable_http_app))
 
 # =========================================================
 # MCP lifecycle
@@ -215,15 +219,14 @@ def ui_documents(query, limit):
 
 with gr.Blocks(title="OhamLab Plugin") as demo:
     gr.Markdown(
-        "# OhamLab Plugin\n"
-        "Search websites, extract readable content, and store documents "
-        "for use by DeepSeek Harness through MCP."
+        "# Into the Unknown\n"
+       
     )
 
     with gr.Tab("Search → Fetch → Store"):
         query = gr.Textbox(
             label="Search query",
-            placeholder="Hugging Face MCP documentation",
+            placeholder="Hugginn",
         )
 
         with gr.Row():
