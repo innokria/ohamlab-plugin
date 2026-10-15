@@ -1,5 +1,25 @@
 # OhamLab Plugin
 
+
+```
+GitHub: ohamlab-plugin
+        |
+        | Pull code during build/startup
+        v
+ Space
+        |
+        +-- MCP server
+        +-- Web-agent engine
+        +-- Browser automation
+        |
+        +-- Bucket
+              |
+              +-- Saved sessions (if securely supported)
+              +-- Monitor configurations
+              +-- Task history
+              +-- Persistent data
+```
+
 ## 1. Objective
 
 Build a modular, MCP-compatible agent service
