@@ -21,11 +21,11 @@ GitHub: ohamlab-plugin
 ```
 ## Harness
 ```
-DeepSeek Harness
+ Harness
        |
        | MCP
        v
-ohamlab-plugin (Hugging Face Space)
+ohamlab-plugin (Space)
        |
        +-- Web search
        +-- Web fetch
