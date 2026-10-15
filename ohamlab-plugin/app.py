@@ -1,16 +1,29 @@
+
 """OhamLab Plugin: Gradio UI, FastAPI endpoints, and MCP server."""
 
 import os
 import secrets
+from contextlib import asynccontextmanager
 
 import gradio as gr
-from fastapi import FastAPI, Request, HTTPException
-from fastapi.responses import JSONResponse
+from fastapi import FastAPI, Request
+from fastapi.responses import JSONResponse, RedirectResponse
 
 from mcp_server.server import mcp
 from mcp_server.tools.search import search_and_fetch
 from browser.automation import fetch_page
 from storage.bucket import store
+
+
+# =========================================================
+# MCP lifecycle
+# =========================================================
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """Initialize MCP's task group for the application's lifetime."""
+    async with mcp.session_manager.run():
+        yield
 
 
 # =========================================================
@@ -20,19 +33,23 @@ from storage.bucket import store
 app = FastAPI(
     title="OhamLab Plugin",
     version="0.1.0",
+    lifespan=lifespan,
 )
 
 
 # =========================================================
-# Authentication using HF_TOKEN
+# Authentication
 # =========================================================
 
 def _authorized(request: Request) -> bool:
-    """Validate an incoming Bearer token against HF_TOKEN."""
-    expected = os.getenv("HF_TOKEN", "").strip()
+    """Validate a Bearer token against the configured shared secret."""
+    expected = os.getenv("OHAM_MCP_API_KEY", "").strip()
 
-    # Hosted deployments must configure HF_TOKEN.
-    # Local development can run without authentication.
+    # Backward compatibility with the existing HF_TOKEN setting.
+    if not expected:
+        expected = os.getenv("HF_TOKEN", "").strip()
+
+    # Allow unauthenticated local development only.
     if not expected:
         return not bool(os.getenv("SPACE_ID"))
 
@@ -84,10 +101,7 @@ async def health():
 # =========================================================
 
 @app.get("/api/documents")
-async def api_documents(
-    q: str = "",
-    limit: int = 10,
-):
+async def api_documents(q: str = "", limit: int = 10):
     """List stored documents. Authentication is enforced by middleware."""
     documents = store.list_documents(
         q,
@@ -101,8 +115,7 @@ async def api_documents(
 # MCP endpoint
 # =========================================================
 
-# Expose the Streamable HTTP MCP server under /mcp.
-# The client URL will be https://YOUR-SPACE.hf.space/mcp
+# Keep the MCP endpoint separate from Gradio.
 app.mount(
     "/mcp",
     mcp.streamable_http_app(),
@@ -142,7 +155,8 @@ def ui_search(query, max_results, fetch_top):
 
         if result.get("errors"):
             saved_md += "\n\n### Fetch errors\n" + "\n".join(
-                f"- {item.get('url', '')}: {item.get('error', 'Unknown error')}"
+                f"- {item.get('url', '')}: "
+                f"{item.get('error', 'Unknown error')}"
                 for item in result["errors"]
             )
 
@@ -286,17 +300,16 @@ with gr.Blocks(title="OhamLab Plugin") as demo:
         )
 
 
-# IMPORTANT:
-# Register FastAPI routes and mount MCP before mounting Gradio at "/".
-# Gradio must be mounted last to avoid intercepting /health and API routes.
-from fastapi.responses import RedirectResponse
+# =========================================================
+# Root redirect and Gradio mount
+# =========================================================
 
-# Keep the API endpoints separate from the Gradio UI.
 @app.get("/", include_in_schema=False)
 async def root():
-    return RedirectResponse(url="/ui")
+    return RedirectResponse(url="/ui/")
 
-# Mount Gradio under /ui, not at the root.
+
+# Mount Gradio last, without intercepting the API endpoints.
 app = gr.mount_gradio_app(
     app,
     demo,
