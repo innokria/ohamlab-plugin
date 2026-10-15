@@ -34,6 +34,22 @@ ohamlab-plugin (Space)
        +-- Saved sessions
        +-- Website monitoring
 ```
+
+
+## First atempt
+
+```
+ Harness
+Ask: find a website and collect its data
+
+MCP tools in ohamlab-plugin
+Search → Fetch → Extract → Store → Retrieve
+
+Website data store
+URL · page title · extracted text · metadata · timestamps · task history
+
+Structured results returned to Harness, with source URLs for traceability.
+```
 ## 1. Objective
 
 Build a modular, MCP-compatible agent service
