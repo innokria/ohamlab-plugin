@@ -1,7 +1,7 @@
 fastapi>=0.115,<1
 uvicorn[standard]>=0.30
 gradio>=5.0
-mcp[cli]>=1.9
+mcp[cli]>=1.9,<2.0
 ddgs>=9.0
 beautifulsoup4>=4.12
 trafilatura>=2.0
