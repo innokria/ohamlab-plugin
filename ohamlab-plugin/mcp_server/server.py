@@ -4,16 +4,20 @@ from mcp_server.tools.search import web_search, search_and_fetch
 from browser.automation import fetch_page
 from storage.bucket import store
 
+from mcp.server.fastmcp import FastMCP
+from mcp.server.transport_security import TransportSecuritySettings
+
 mcp = FastMCP(
-    "ohamlab-plugin",
-    instructions=(
-        "Search public websites, fetch and extract page content, and persist results. "
-        "Use web_search_tool when a URL is unknown, web_fetch for a known URL, "
-        "search_and_fetch_tool to collect multiple pages, and get_document to retrieve saved text. "
-        "Always preserve source URLs and document IDs in results."
+    "OhamLab",
+    transport_security=TransportSecuritySettings(
+        enable_dns_rebinding_protection=True,
+        allowed_hosts=[
+            "rahul7star-ohamlab-plugin.hf.space",
+        ],
+        allowed_origins=[
+            "https://rahul7star-ohamlab-plugin.hf.space",
+        ],
     ),
-    streamable_http_path="/",
-    stateless_http=True,
 )
 
 
