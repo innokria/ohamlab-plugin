@@ -109,9 +109,7 @@ async def list_documents(request: Request):
 # MCP Streamable HTTP transport
 # --------------------------------------------------
 
-mcp_http_app = mcp.streamable_http_app(
-    transport_security=transport_security,
-)
+mcp_http_app = mcp.streamable_http_app()
 
 app.mount("/mcp", mcp_http_app)
 
