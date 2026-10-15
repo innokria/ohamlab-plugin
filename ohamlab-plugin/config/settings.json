@@ -1,0 +1,10 @@
+{
+  "service_name": "ohamlab-plugin",
+  "search_provider": "ddgs",
+  "max_search_results": 10,
+  "default_fetch_top": 3,
+  "max_fetch_chars": 30000,
+  "fetch_timeout_seconds": 25,
+  "data_dir_env": "OHAM_DATA_DIR",
+  "mcp_path": "/mcp"
+}
