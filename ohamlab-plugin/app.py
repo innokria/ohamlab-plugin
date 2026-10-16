@@ -76,50 +76,52 @@ def _expected_api_key() -> str:
     )
 
 
+
 def _authorized(request: Request) -> bool:
-    """Allow tokenless access when authentication is disabled."""
-    if not MCP_AUTH_REQUIRED:
-        auth_logger.warning(
-            "AUTH BYPASSED method=%s path=%s",
+    """Validate a custom OhamLab header or the existing Bearer token."""
+    expected = _expected_api_key()
+
+    # Custom plain-text header
+    supplied_custom = request.headers.get("x-ohamlab-key", "").strip()
+
+    if expected and supplied_custom:
+        if hmac.compare_digest(supplied_custom, expected):
+            auth_logger.info(
+                "AUTH ALLOWED method=%s path=%s scheme=custom-header",
+                request.method,
+                request.url.path,
+            )
+            return True
+
+    # Backward compatibility with Bearer authentication
+    authorization = request.headers.get("authorization", "")
+    scheme, separator, supplied = authorization.partition(" ")
+
+    if (
+        expected
+        and separator
+        and scheme.lower() == "bearer"
+        and supplied.strip()
+        and hmac.compare_digest(supplied.strip(), expected)
+    ):
+        auth_logger.info(
+            "AUTH ALLOWED method=%s path=%s scheme=bearer",
             request.method,
             request.url.path,
         )
         return True
 
-    expected = _expected_api_key()
-    authorization = request.headers.get("authorization", "")
-    scheme, separator, supplied = authorization.partition(" ")
-    supplied = supplied.strip()
-
-    logger.info(
-        "AUTH CHECK method=%s path=%s header_present=%s "
-        "scheme=%r token_present=%s key_configured=%s",
+    auth_logger.warning(
+        "AUTH DENIED method=%s path=%s custom_header_present=%s "
+        "authorization_present=%s key_configured=%s",
         request.method,
         request.url.path,
+        bool(supplied_custom),
         bool(authorization),
-        scheme or "missing",
-        bool(separator and supplied),
         bool(expected),
     )
+    return False
 
-    if not expected:
-        auth_logger.error("AUTH DENIED: no API key configured")
-        return False
-
-    if not separator or scheme.lower() != "bearer" or not supplied:
-        auth_logger.warning(
-            "AUTH DENIED: missing or invalid Bearer authorization"
-        )
-        return False
-
-    authorized = hmac.compare_digest(supplied, expected)
-
-    if authorized:
-        auth_logger.info("AUTH ALLOWED path=%s", request.url.path)
-    else:
-        auth_logger.warning("AUTH DENIED: token mismatch")
-
-    return authorized
 
 
 # ---------------------------------------------------------
