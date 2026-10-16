@@ -13,6 +13,31 @@ An independent web-data extraction service intended to connect to DeepSeek Harne
 
 This project implements its own version of a broad search → fetch → extract → store workflow. It is not a copy of TinyFish proprietary technology and does not claim feature parity or guaranteed access to every website.
 ## DEEPSEEK changes
+## cordis.patch.yml
+```
+- insert:
+    - id: free-model-rahul
+      name: dsh-free-model-command
+
+
+- insert:
+    - id: mcp-ohamlab
+      name: '@deepseek-ai/dsh-mcp-client'
+      config:
+        serverName: ohamlab
+        transport: streamable-http
+        url: 'https:/space/mcp/'
+        headers:
+          Authorization: !!js '`Bearer ${process.env.API_KEY}`'
+        toolCallTimeoutMs: 60000
+        failOnStartupError: false
+        reconnect:
+          enabled: true
+          initialDelayMs: 500
+          maxDelayMs: 30000
+          maxAttempts: 10
+```
+
 ```
 
 Summary of Fixes Applied
