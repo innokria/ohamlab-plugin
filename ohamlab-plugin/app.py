@@ -2,7 +2,9 @@
 """OhamLab Plugin: MCP server, document API, and Gradio UI."""
 
 import hmac
+import logging
 import os
+import time
 from contextlib import asynccontextmanager
 from datetime import datetime, timezone
 from pathlib import Path
@@ -12,6 +14,22 @@ from fastapi import FastAPI, Query, Request
 from fastapi.responses import JSONResponse, RedirectResponse
 
 from mcp_server.server import mcp
+
+
+# ---------------------------------------------------------
+# Logging
+# ---------------------------------------------------------
+
+LOG_LEVEL = os.getenv("LOG_LEVEL", "INFO").upper()
+
+logging.basicConfig(
+    level=getattr(logging, LOG_LEVEL, logging.INFO),
+    format="%(asctime)s %(levelname)s %(name)s %(message)s",
+)
+
+logger = logging.getLogger("ohamlab.plugin")
+auth_logger = logging.getLogger("ohamlab.auth")
+request_logger = logging.getLogger("ohamlab.request")
 
 
 # ---------------------------------------------------------
@@ -28,26 +46,14 @@ STORAGE_DIR = Path(
 ).resolve()
 
 TEXT_EXTENSIONS = {
-    ".txt",
-    ".md",
-    ".markdown",
-    ".rst",
-    ".json",
-    ".jsonl",
-    ".csv",
-    ".xml",
-    ".html",
-    ".htm",
-    ".yaml",
-    ".yml",
-    ".py",
-    ".js",
-    ".ts",
-    ".tsx",
-    ".jsx",
-    ".css",
-    ".sql",
-    ".log",
+    ".txt", ".md", ".markdown", ".rst", ".json", ".jsonl",
+    ".csv", ".xml", ".html", ".htm", ".yaml", ".yml",
+    ".py", ".js", ".ts", ".tsx", ".jsx", ".css", ".sql", ".log",
+}
+
+PROTECTED_PATHS = {
+    "/mcp",
+    "/api/documents",
 }
 
 
@@ -64,20 +70,97 @@ def _expected_api_key() -> str:
 
 
 def _authorized(request: Request) -> bool:
-    """Validate the bearer token for protected endpoints."""
+    """Validate the bearer token and log safe authentication diagnostics."""
     expected = _expected_api_key()
+
+    authorization = request.headers.get("authorization", "")
+    print("rahul="*80)
+    print(authorization)
+    scheme, separator, supplied = authorization.partition(" ")
+    supplied = supplied.strip()
+
+    # Do not log authorization values or secret contents.
+    token_present = bool(separator and supplied)
+
+    logger.info(
+        "AUTH CHECK method=%s path=%s host=%r client=%s "
+        "authorization_header_present=%s scheme=%r "
+        "token_present=%s token_length=%d key_configured=%s "
+        "key_source=%s",
+        request.method,
+        request.url.path,
+        request.headers.get("host", ""),
+        request.client.host if request.client else "unknown",
+        bool(authorization),
+        scheme or "missing",
+        token_present,
+        len(supplied) if token_present else 0,
+        bool(expected),
+        (
+            "OHAM_MCP_API_KEY"
+            if os.getenv("OHAM_MCP_API_KEY", "").strip()
+            else "HF_TOKEN"
+            if os.getenv("HF_TOKEN", "").strip()
+            else "none"
+        ),
+    )
 
     # Fail closed if no API key is configured.
     if not expected:
+        auth_logger.error(
+            "AUTH DENIED reason=api_key_not_configured "
+            "method=%s path=%s host=%r",
+            request.method,
+            request.url.path,
+            request.headers.get("host", ""),
+        )
         return False
 
-    authorization = request.headers.get("authorization", "")
-    scheme, separator, supplied = authorization.partition(" ")
-
-    if not separator or scheme.lower() != "bearer":
+    if not separator:
+        auth_logger.warning(
+            "AUTH DENIED reason=missing_or_malformed_authorization "
+            "method=%s path=%s",
+            request.method,
+            request.url.path,
+        )
         return False
 
-    return hmac.compare_digest(supplied.strip(), expected)
+    if scheme.lower() != "bearer":
+        auth_logger.warning(
+            "AUTH DENIED reason=unsupported_scheme scheme=%r "
+            "method=%s path=%s",
+            scheme,
+            request.method,
+            request.url.path,
+        )
+        return False
+
+    if not supplied:
+        auth_logger.warning(
+            "AUTH DENIED reason=empty_bearer_token method=%s path=%s",
+            request.method,
+            request.url.path,
+        )
+        return False
+
+    authorized = hmac.compare_digest(supplied, expected)
+
+    if authorized:
+        auth_logger.info(
+            "AUTH ALLOWED method=%s path=%s",
+            request.method,
+            request.url.path,
+        )
+    else:
+        auth_logger.warning(
+            "AUTH DENIED reason=token_mismatch method=%s path=%s "
+            "supplied_token_length=%d",
+            request.method,
+            request.url.path,
+            len(supplied),
+        )
+
+    return authorized
 
 
 # ---------------------------------------------------------
@@ -87,8 +170,14 @@ def _authorized(request: Request) -> bool:
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Start and stop the MCP session manager with FastAPI."""
-    async with mcp.session_manager.run():
-        yield
+    logger.info("Starting OhamLab MCP session manager")
+
+    try:
+        async with mcp.session_manager.run():
+            logger.info("OhamLab MCP session manager started")
+            yield
+    finally:
+        logger.info("Stopping OhamLab MCP session manager")
 
 
 app = FastAPI(
@@ -99,21 +188,46 @@ app = FastAPI(
 
 
 # ---------------------------------------------------------
-# Authentication middleware
+# Request logging and authentication middleware
 # ---------------------------------------------------------
 
 @app.middleware("http")
 async def protect_api(request: Request, call_next):
+    started = time.monotonic()
     path = request.url.path.rstrip("/") or "/"
 
-    protected = (
-        path == "/mcp"
-        or path == "/api/documents"
+    host = request.headers.get("host", "")
+    client_ip = request.client.host if request.client else "unknown"
+
+    # Forwarded headers are caller-controlled unless a trusted
+    # proxy sanitizes them. Log as diagnostics, not trusted identity.
+    forwarded_for = request.headers.get("x-forwarded-for", "")
+    forwarded_proto = request.headers.get("x-forwarded-proto", "")
+    user_agent = request.headers.get("user-agent", "")
+
+    request_logger.info(
+        "REQUEST START method=%s path=%s query=%r host=%r "
+        "client_ip=%s forwarded_for=%r forwarded_proto=%r "
+        "user_agent=%r content_type=%r content_length=%r",
+        request.method,
+        path,
+        request.url.query,
+        host,
+        client_ip,
+        forwarded_for,
+        forwarded_proto,
+        user_agent,
+        request.headers.get("content-type", ""),
+        request.headers.get("content-length", ""),
     )
 
+    protected = path in PROTECTED_PATHS
+
     if protected and not _authorized(request):
-        if not _expected_api_key():
-            return JSONResponse(
+        key_configured = bool(_expected_api_key())
+
+        if not key_configured:
+            response = JSONResponse(
                 status_code=503,
                 content={
                     "detail": (
@@ -122,14 +236,59 @@ async def protect_api(request: Request, call_next):
                     )
                 },
             )
+        else:
+            response = JSONResponse(
+                status_code=401,
+                content={"detail": "Invalid or missing bearer token"},
+                headers={"WWW-Authenticate": "Bearer"},
+            )
 
-        return JSONResponse(
-            status_code=401,
-            content={"detail": "Invalid or missing bearer token"},
-            headers={"WWW-Authenticate": "Bearer"},
+        elapsed_ms = round((time.monotonic() - started) * 1000, 2)
+
+        request_logger.warning(
+            "REQUEST END method=%s path=%s host=%r client_ip=%s "
+            "status=%d auth=denied duration_ms=%.2f",
+            request.method,
+            path,
+            host,
+            client_ip,
+            response.status_code,
+            elapsed_ms,
+        )
+        return response
+
+    try:
+        response = await call_next(request)
+
+        elapsed_ms = round((time.monotonic() - started) * 1000, 2)
+
+        request_logger.info(
+            "REQUEST END method=%s path=%s host=%r client_ip=%s "
+            "status=%d auth=%s duration_ms=%.2f",
+            request.method,
+            path,
+            host,
+            client_ip,
+            response.status_code,
+            "passed" if protected else "not_required",
+            elapsed_ms,
         )
 
-    return await call_next(request)
+        return response
+
+    except Exception:
+        elapsed_ms = round((time.monotonic() - started) * 1000, 2)
+
+        request_logger.exception(
+            "REQUEST ERROR method=%s path=%s host=%r client_ip=%s "
+            "duration_ms=%.2f",
+            request.method,
+            path,
+            host,
+            client_ip,
+            elapsed_ms,
+        )
+        raise
 
 
 # ---------------------------------------------------------
@@ -137,12 +296,7 @@ async def protect_api(request: Request, call_next):
 # ---------------------------------------------------------
 
 def list_documents(query: str = "", limit: int = 1000) -> list[dict]:
-    """
-    Read document metadata from the mounted storage directory.
-
-    Files are listed recursively. File contents are not returned
-    by this endpoint.
-    """
+    """List file metadata recursively without returning file contents."""
     if not STORAGE_DIR.is_dir():
         raise FileNotFoundError(
             f"Storage directory is unavailable: {STORAGE_DIR}"
@@ -150,7 +304,6 @@ def list_documents(query: str = "", limit: int = 1000) -> list[dict]:
 
     query = query.strip().casefold()
     limit = max(1, min(int(limit), 1000))
-
     documents = []
 
     for path in STORAGE_DIR.rglob("*"):
@@ -160,7 +313,6 @@ def list_documents(query: str = "", limit: int = 1000) -> list[dict]:
         try:
             relative_path = path.relative_to(STORAGE_DIR).as_posix()
 
-            # Skip common internal metadata directories.
             if any(
                 part in {".git", "__pycache__"}
                 for part in Path(relative_path).parts
@@ -182,19 +334,15 @@ def list_documents(query: str = "", limit: int = 1000) -> list[dict]:
                         stat.st_mtime,
                         tz=timezone.utc,
                     ).isoformat(),
-                    "text_supported": (
-                        path.suffix.lower() in TEXT_EXTENSIONS
-                    ),
+                    "text_supported": path.suffix.lower() in TEXT_EXTENSIONS,
                 }
             )
 
         except (OSError, ValueError):
-            # Ignore files that disappear or become unreadable
-            # while the mounted directory is being scanned.
+            logger.debug("Skipping inaccessible file under storage directory")
             continue
 
     documents.sort(key=lambda item: item["path"].casefold())
-
     return documents[:limit]
 
 
@@ -204,10 +352,17 @@ def list_documents(query: str = "", limit: int = 1000) -> list[dict]:
 
 @app.get("/health")
 async def health():
+    storage_available = STORAGE_DIR.is_dir()
+
+    logger.info(
+        "HEALTH CHECK status=ok storage_available=%s",
+        storage_available,
+    )
+
     return {
         "status": "ok",
         "service": "ohamlab-plugin",
-        "storage_available": STORAGE_DIR.is_dir(),
+        "storage_available": storage_available,
     }
 
 
@@ -220,8 +375,19 @@ async def documents_api(
     q: str = Query(default="", max_length=500),
     limit: int = Query(default=100, ge=1, le=1000),
 ):
+    logger.info(
+        "DOCUMENT LIST requested query_length=%d limit=%d",
+        len(q),
+        limit,
+    )
+
     try:
         documents = list_documents(q, limit)
+
+        logger.info(
+            "DOCUMENT LIST completed count=%d",
+            len(documents),
+        )
 
         return {
             "ok": True,
@@ -230,6 +396,8 @@ async def documents_api(
         }
 
     except FileNotFoundError as exc:
+        logger.error("DOCUMENT STORAGE unavailable: %s", exc)
+
         return JSONResponse(
             status_code=503,
             content={
@@ -240,13 +408,14 @@ async def documents_api(
             },
         )
 
-    except OSError as exc:
+    except OSError:
+        logger.exception("DOCUMENT STORAGE read failed")
+
         return JSONResponse(
             status_code=500,
             content={
                 "ok": False,
                 "error": "storage_read_failed",
-                "detail": str(exc)[:500],
                 "documents": [],
             },
         )
@@ -259,9 +428,10 @@ async def documents_api(
 def refresh_documents(query: str):
     """Return mounted-storage file metadata for the Gradio table."""
     try:
-        documents = list_documents(query, limit=1000)
+        documents = list_documents(query or "", limit=1000)
 
-        # Gradio Dataframe expects rows, not dictionaries.
+        logger.info("GRADIO document refresh count=%d", len(documents))
+
         return [
             [
                 item["path"],
@@ -272,8 +442,9 @@ def refresh_documents(query: str):
             for item in documents
         ]
 
-    except Exception as exc:
-        raise gr.Error(f"Unable to read mounted storage: {exc}")
+    except Exception:
+        logger.exception("GRADIO document refresh failed")
+        raise gr.Error("Unable to read mounted storage. Check Space logs.")
 
 
 with gr.Blocks(title="OhamLab Plugin") as demo:
@@ -327,8 +498,8 @@ with gr.Blocks(title="OhamLab Plugin") as demo:
 # MCP Streamable HTTP mount
 # ---------------------------------------------------------
 
-# The FastMCP server uses streamable_http_path="/".
-# Mounting it at "/mcp" exposes its endpoint at /mcp/.
+# FastMCP uses streamable_http_path="/".
+# Mounting at "/mcp" exposes the endpoint at /mcp/.
 mcp_http_app = mcp.streamable_http_app()
 app.mount("/mcp", mcp_http_app)
 
@@ -356,8 +527,16 @@ async def home():
 if __name__ == "__main__":
     import uvicorn
 
+    logger.info(
+        "Starting OhamLab Plugin host=0.0.0.0 port=%s storage=%s",
+        os.getenv("PORT", "7860"),
+        STORAGE_DIR,
+    )
+
     uvicorn.run(
         app,
         host="0.0.0.0",
         port=int(os.getenv("PORT", "7860")),
+        log_level=LOG_LEVEL.lower(),
+        access_log=True,
     )
