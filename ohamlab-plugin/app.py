@@ -78,49 +78,26 @@ def _expected_api_key() -> str:
 
 
 def _authorized(request: Request) -> bool:
-    """Validate a custom OhamLab header or the existing Bearer token."""
-    expected = _expected_api_key()
+    """Require X-OhamLab-Key to match the Hugging Face Space secret."""
 
-    # Custom plain-text header
-    supplied_custom = request.headers.get("x-ohamlab-key", "").strip()
+    expected = os.getenv("OHAM_MCP_API_KEY", "").strip()
+    supplied = request.headers.get("X-OhamLab-Key", "").strip()
 
-    if expected and supplied_custom:
-        if hmac.compare_digest(supplied_custom, expected):
-            auth_logger.info(
-                "AUTH ALLOWED method=%s path=%s scheme=custom-header",
-                request.method,
-                request.url.path,
-            )
-            return True
+    if not supplied:
+        auth_logger.warning("AUTH DENIED: X-OhamLab-Key missing")
+        return False
 
-    # Backward compatibility with Bearer authentication
-    authorization = request.headers.get("authorization", "")
-    scheme, separator, supplied = authorization.partition(" ")
+    if not expected:
+        auth_logger.error("AUTH DENIED: OHAM_MCP_API_KEY not configured")
+        return False
 
-    if (
-        expected
-        and separator
-        and scheme.lower() == "bearer"
-        and supplied.strip()
-        and hmac.compare_digest(supplied.strip(), expected)
-    ):
-        auth_logger.info(
-            "AUTH ALLOWED method=%s path=%s scheme=bearer",
-            request.method,
-            request.url.path,
-        )
-        return True
+    if not hmac.compare_digest(supplied, expected):
+        auth_logger.warning("AUTH DENIED: X-OhamLab-Key mismatch")
+        return False
 
-    auth_logger.warning(
-        "AUTH DENIED method=%s path=%s custom_header_present=%s "
-        "authorization_present=%s key_configured=%s",
-        request.method,
-        request.url.path,
-        bool(supplied_custom),
-        bool(authorization),
-        bool(expected),
-    )
-    return False
+    auth_logger.info("AUTH ALLOWED: X-OhamLab-Key matched")
+    return True
+
 
 
 
