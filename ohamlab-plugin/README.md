@@ -12,7 +12,46 @@ An independent web-data extraction service intended to connect to DeepSeek Harne
 - Provide a Gradio UI for manual testing.
 
 This project implements its own version of a broad search → fetch → extract → store workflow. It is not a copy of TinyFish proprietary technology and does not claim feature parity or guaranteed access to every website.
-
+## Code
+```
+ohamlab-plugin/
+│
+├── README.md
+├── requirements.txt
+├── .gitignore
+├── Dockerfile
+├── start.sh
+│
+├── app.py
+│
+├── config/
+│   └── settings.json
+│
+├── mcp_server/
+│   ├── __init__.py
+│   ├── server.py
+│   └── tools/
+│       ├── __init__.py
+│       └── search.py
+│
+├── agent/
+│   ├── __init__.py
+│   └── engine.py
+│
+├── browser/
+│   ├── __init__.py
+│   └── automation.py
+│
+├── storage/
+│   ├── __init__.py
+│   └── bucket.py
+│
+├── tests/
+│   └── test_search.py
+│
+└── planning/
+    └── design.md
+```
 ## Run locally
 
 Python 3.11+ is recommended.
