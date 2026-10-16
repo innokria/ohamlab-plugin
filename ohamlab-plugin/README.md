@@ -25,6 +25,14 @@ task_history	Retrieve recent task history
 
 This project implements its own version of a broad search → fetch → extract → store workflow. It is not a copy of TinyFish proprietary technology and does not claim feature parity or guaranteed access to every website.
 ## DEEPSEEK changes
+
+## Deepseek prompt
+```
+Search the web for: [YOUR_QUERY_HERE]
+Use the web_search_tool with:
+- query: "[YOUR_QUERY_HERE]"
+- max_results: [NUMBER, optional, default 5]
+```
 ## web profile -> cordis.patch.yml
 ```
 - insert:
