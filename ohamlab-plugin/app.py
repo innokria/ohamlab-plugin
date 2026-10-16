@@ -1,4 +1,3 @@
-
 """OhamLab Plugin: MCP server, document API, and Gradio UI."""
 
 import hmac
@@ -57,48 +56,50 @@ PROTECTED_PATHS = {
 }
 
 
-
 # ---------------------------------------------------------
 # Authentication
 # ---------------------------------------------------------
 
-MCP_AUTH_REQUIRED = (
-    os.getenv("MCP_AUTH_REQUIRED", "true").strip().lower()
-    in {"1", "true", "yes", "on"}
-)
-
-
 def _expected_api_key() -> str:
-    """Use the dedicated MCP key, falling back to HF_TOKEN."""
-    return (
-        os.getenv("OHAM_MCP_API_KEY", "").strip()
-        or os.getenv("HF_TOKEN", "").strip()
-    )
-
+    """Read only the dedicated MCP secret from Space settings."""
+    return os.getenv("OHAM_MCP_API_KEY", "").strip()
 
 
 def _authorized(request: Request) -> bool:
-    """Require X-OhamLab-Key to match the Hugging Face Space secret."""
-
-    expected = os.getenv("OHAM_MCP_API_KEY", "").strip()
+    """Require X-OhamLab-Key to match the configured MCP secret."""
+    expected = _expected_api_key()
     supplied = request.headers.get("X-OhamLab-Key", "").strip()
 
     if not supplied:
-        auth_logger.warning("AUTH DENIED: X-OhamLab-Key missing")
+        auth_logger.warning(
+            "AUTH DENIED reason=missing_x_ohamlab_key method=%s path=%s",
+            request.method,
+            request.url.path,
+        )
         return False
 
     if not expected:
-        auth_logger.error("AUTH DENIED: OHAM_MCP_API_KEY not configured")
+        auth_logger.error(
+            "AUTH DENIED reason=mcp_key_not_configured method=%s path=%s",
+            request.method,
+            request.url.path,
+        )
         return False
 
     if not hmac.compare_digest(supplied, expected):
-        auth_logger.warning("AUTH DENIED: X-OhamLab-Key mismatch")
+        auth_logger.warning(
+            "AUTH DENIED reason=x_ohamlab_key_mismatch method=%s path=%s",
+            request.method,
+            request.url.path,
+        )
         return False
 
-    auth_logger.info("AUTH ALLOWED: X-OhamLab-Key matched")
+    auth_logger.info(
+        "AUTH ALLOWED method=%s path=%s scheme=custom-header",
+        request.method,
+        request.url.path,
+    )
     return True
-
-
 
 
 # ---------------------------------------------------------
@@ -137,8 +138,7 @@ async def protect_api(request: Request, call_next):
     host = request.headers.get("host", "")
     client_ip = request.client.host if request.client else "unknown"
 
-    # Forwarded headers are caller-controlled unless a trusted
-    # proxy sanitizes them. Log as diagnostics, not trusted identity.
+    # These headers are diagnostic only; do not treat them as identity.
     forwarded_for = request.headers.get("x-forwarded-for", "")
     forwarded_proto = request.headers.get("x-forwarded-proto", "")
     user_agent = request.headers.get("user-agent", "")
@@ -169,7 +169,7 @@ async def protect_api(request: Request, call_next):
                 status_code=503,
                 content={
                     "detail": (
-                        "API authentication is not configured. "
+                        "MCP authentication is not configured. "
                         "Set OHAM_MCP_API_KEY in Space Secrets."
                     )
                 },
@@ -177,11 +177,16 @@ async def protect_api(request: Request, call_next):
         else:
             response = JSONResponse(
                 status_code=401,
-                content={"detail": "Invalid or missing bearer token"},
-                headers={"WWW-Authenticate": "Bearer"},
+                content={
+                    "detail": (
+                        "Missing or invalid X-OhamLab-Key header"
+                    )
+                },
             )
 
-        elapsed_ms = round((time.monotonic() - started) * 1000, 2)
+        elapsed_ms = round(
+            (time.monotonic() - started) * 1000, 2
+        )
 
         request_logger.warning(
             "REQUEST END method=%s path=%s host=%r client_ip=%s "
@@ -198,7 +203,9 @@ async def protect_api(request: Request, call_next):
     try:
         response = await call_next(request)
 
-        elapsed_ms = round((time.monotonic() - started) * 1000, 2)
+        elapsed_ms = round(
+            (time.monotonic() - started) * 1000, 2
+        )
 
         request_logger.info(
             "REQUEST END method=%s path=%s host=%r client_ip=%s "
@@ -215,7 +222,9 @@ async def protect_api(request: Request, call_next):
         return response
 
     except Exception:
-        elapsed_ms = round((time.monotonic() - started) * 1000, 2)
+        elapsed_ms = round(
+            (time.monotonic() - started) * 1000, 2
+        )
 
         request_logger.exception(
             "REQUEST ERROR method=%s path=%s host=%r client_ip=%s "
@@ -233,7 +242,10 @@ async def protect_api(request: Request, call_next):
 # Mounted bucket / document storage
 # ---------------------------------------------------------
 
-def list_documents(query: str = "", limit: int = 1000) -> list[dict]:
+def list_documents(
+    query: str = "",
+    limit: int = 1000,
+) -> list[dict]:
     """List file metadata recursively without returning file contents."""
     if not STORAGE_DIR.is_dir():
         raise FileNotFoundError(
@@ -249,7 +261,9 @@ def list_documents(query: str = "", limit: int = 1000) -> list[dict]:
             continue
 
         try:
-            relative_path = path.relative_to(STORAGE_DIR).as_posix()
+            relative_path = path.relative_to(
+                STORAGE_DIR
+            ).as_posix()
 
             if any(
                 part in {".git", "__pycache__"}
@@ -272,12 +286,16 @@ def list_documents(query: str = "", limit: int = 1000) -> list[dict]:
                         stat.st_mtime,
                         tz=timezone.utc,
                     ).isoformat(),
-                    "text_supported": path.suffix.lower() in TEXT_EXTENSIONS,
+                    "text_supported": (
+                        path.suffix.lower() in TEXT_EXTENSIONS
+                    ),
                 }
             )
 
         except (OSError, ValueError):
-            logger.debug("Skipping inaccessible file under storage directory")
+            logger.debug(
+                "Skipping inaccessible file under storage directory"
+            )
             continue
 
     documents.sort(key=lambda item: item["path"].casefold())
@@ -366,9 +384,15 @@ async def documents_api(
 def refresh_documents(query: str):
     """Return mounted-storage file metadata for the Gradio table."""
     try:
-        documents = list_documents(query or "", limit=1000)
+        documents = list_documents(
+            query or "",
+            limit=1000,
+        )
 
-        logger.info("GRADIO document refresh count=%d", len(documents))
+        logger.info(
+            "GRADIO document refresh count=%d",
+            len(documents),
+        )
 
         return [
             [
@@ -382,7 +406,9 @@ def refresh_documents(query: str):
 
     except Exception:
         logger.exception("GRADIO document refresh failed")
-        raise gr.Error("Unable to read mounted storage. Check Space logs.")
+        raise gr.Error(
+            "Unable to read mounted storage. Check Space logs."
+        )
 
 
 with gr.Blocks(title="OhamLab Plugin") as demo:
@@ -398,7 +424,10 @@ with gr.Blocks(title="OhamLab Plugin") as demo:
             placeholder="Search filenames or folders...",
             scale=4,
         )
-        refresh_button = gr.Button("Refresh", variant="primary")
+        refresh_button = gr.Button(
+            "Refresh",
+            variant="primary",
+        )
 
     document_table = gr.Dataframe(
         headers=[
