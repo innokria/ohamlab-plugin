@@ -12,6 +12,27 @@ An independent web-data extraction service intended to connect to DeepSeek Harne
 - Provide a Gradio UI for manual testing.
 
 This project implements its own version of a broad search → fetch → extract → store workflow. It is not a copy of TinyFish proprietary technology and does not claim feature parity or guaranteed access to every website.
+## DEEPSEEK changes
+```
+
+Summary of Fixes Applied
+Fix 1: Configuration — /data/dsh/profiles/web/cordis.patch.yml
+Authorization env var: API_KEY 
+MCP endpoint: 
+https://spaceurl
+Transport: streamable-http
+Fix 2: Code — /app/deepseek-harness/scripts/gen-tool-catalog.ts
+Added @deepseek-ai/dsh-mcp-client entry to TOOL_PACKAGES constant
+The entry includes:
+pkg: @deepseek-ai/dsh-mcp-client
+dir: mcp-client
+source: packages/mcp-client/src/index.ts
+requires: ['ctx.tools', 'ctx.systemPrompt']
+writes: ['tool/call', 'tool/result']
+note: Describes the six OhamLab tools and MCP endpoint
+
+```
+
 ## Code
 ```
 ohamlab-plugin/
