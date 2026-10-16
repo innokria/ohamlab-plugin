@@ -13,7 +13,7 @@ An independent web-data extraction service intended to connect to DeepSeek Harne
 
 This project implements its own version of a broad search → fetch → extract → store workflow. It is not a copy of TinyFish proprietary technology and does not claim feature parity or guaranteed access to every website.
 ## DEEPSEEK changes
-## cordis.patch.yml
+## web profile -> cordis.patch.yml
 ```
 - insert:
     - id: free-model-rahul
