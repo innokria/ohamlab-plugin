@@ -57,9 +57,16 @@ PROTECTED_PATHS = {
 }
 
 
+
 # ---------------------------------------------------------
 # Authentication
 # ---------------------------------------------------------
+
+MCP_AUTH_REQUIRED = (
+    os.getenv("MCP_AUTH_REQUIRED", "true").strip().lower()
+    in {"1", "true", "yes", "on"}
+)
+
 
 def _expected_api_key() -> str:
     """Use the dedicated MCP key, falling back to HF_TOKEN."""
@@ -70,95 +77,47 @@ def _expected_api_key() -> str:
 
 
 def _authorized(request: Request) -> bool:
-    """Validate the bearer token and log safe authentication diagnostics."""
-    expected = _expected_api_key()
+    """Allow tokenless access when authentication is disabled."""
+    if not MCP_AUTH_REQUIRED:
+        auth_logger.warning(
+            "AUTH BYPASSED method=%s path=%s",
+            request.method,
+            request.url.path,
+        )
+        return True
 
+    expected = _expected_api_key()
     authorization = request.headers.get("authorization", "")
-    print("rahul="*80)
-    print(authorization)
     scheme, separator, supplied = authorization.partition(" ")
     supplied = supplied.strip()
 
-    # Do not log authorization values or secret contents.
-    token_present = bool(separator and supplied)
-
     logger.info(
-        "AUTH CHECK method=%s path=%s host=%r client=%s "
-        "authorization_header_present=%s scheme=%r "
-        "token_present=%s token_length=%d key_configured=%s "
-        "key_source=%s",
+        "AUTH CHECK method=%s path=%s header_present=%s "
+        "scheme=%r token_present=%s key_configured=%s",
         request.method,
         request.url.path,
-        request.headers.get("host", ""),
-        request.client.host if request.client else "unknown",
         bool(authorization),
         scheme or "missing",
-        token_present,
-        len(supplied) if token_present else 0,
+        bool(separator and supplied),
         bool(expected),
-        (
-            "OHAM_MCP_API_KEY"
-            if os.getenv("OHAM_MCP_API_KEY", "").strip()
-            else "HF_TOKEN"
-            if os.getenv("HF_TOKEN", "").strip()
-            else "none"
-        ),
     )
 
-    # Fail closed if no API key is configured.
     if not expected:
-        auth_logger.error(
-            "AUTH DENIED reason=api_key_not_configured "
-            "method=%s path=%s host=%r",
-            request.method,
-            request.url.path,
-            request.headers.get("host", ""),
-        )
+        auth_logger.error("AUTH DENIED: no API key configured")
         return False
 
-    if not separator:
+    if not separator or scheme.lower() != "bearer" or not supplied:
         auth_logger.warning(
-            "AUTH DENIED reason=missing_or_malformed_authorization "
-            "method=%s path=%s",
-            request.method,
-            request.url.path,
-        )
-        return False
-
-    if scheme.lower() != "bearer":
-        auth_logger.warning(
-            "AUTH DENIED reason=unsupported_scheme scheme=%r "
-            "method=%s path=%s",
-            scheme,
-            request.method,
-            request.url.path,
-        )
-        return False
-
-    if not supplied:
-        auth_logger.warning(
-            "AUTH DENIED reason=empty_bearer_token method=%s path=%s",
-            request.method,
-            request.url.path,
+            "AUTH DENIED: missing or invalid Bearer authorization"
         )
         return False
 
     authorized = hmac.compare_digest(supplied, expected)
 
     if authorized:
-        auth_logger.info(
-            "AUTH ALLOWED method=%s path=%s",
-            request.method,
-            request.url.path,
-        )
+        auth_logger.info("AUTH ALLOWED path=%s", request.url.path)
     else:
-        auth_logger.warning(
-            "AUTH DENIED reason=token_mismatch method=%s path=%s "
-            "supplied_token_length=%d",
-            request.method,
-            request.url.path,
-            len(supplied),
-        )
+        auth_logger.warning("AUTH DENIED: token mismatch")
 
     return authorized
 
