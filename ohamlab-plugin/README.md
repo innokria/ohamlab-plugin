@@ -2,6 +2,18 @@
 
 An independent web-data extraction service intended to connect to DeepSeek Harness (DSH) through the Model Context Protocol (MCP).
 
+## Current Tools
+```
+  Tools available from OhamLab
+Tool	Purpose
+web_search_tool	Search the web
+web_fetch	Fetch and extract a webpage
+search_and_fetch_tool	Search, fetch top results, and store documents
+stored_documents	List saved documents
+get_document	Retrieve a saved document
+task_history	Retrieve recent task history
+
+```
 ## Initial capabilities
 
 - Search the public web using the `ddgs` search library.
