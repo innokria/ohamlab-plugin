@@ -1,0 +1,17 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "ohamlab-agent"
+version = "0.1.0"
+description = "OhamLab web research agent and MCP integration"
+requires-python = ">=3.11"
+dependencies = ["openai>=1.50", "typer>=0.12", "mcp>=1.10", "ddgs", "playwright", "httpx"]
+
+[project.scripts]
+ohamlab = "ohamlab_cli:app"
+
+[tool.setuptools]
+py-modules = ["ohamlab_cli"]
+packages = ["agent", "browser", "storage", "mcp_server", "mcp_server.tools"]
