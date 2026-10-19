@@ -7,6 +7,14 @@ OhamLab can run **without any LLM, API key, or external inference server** for m
 > Repository: https://github.com/innokria/ohamlab-plugin  
 > Application directory: [`ohamlab-plugin/`](https://github.com/innokria/ohamlab-plugin/tree/main/ohamlab-plugin)
 
+## PYPI
+https://pypi.org/project/ohamlab-agent/
+
+## Installation
+```
+pip install ohamlab-agent
+```
+
 ## Features
 
 | Feature | Requires an LLM? | Entry point |
