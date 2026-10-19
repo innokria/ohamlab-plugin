@@ -1,3 +1,4 @@
+
 [build-system]
 requires = ["setuptools>=68", "wheel"]
 build-backend = "setuptools.build_meta"
@@ -8,9 +9,53 @@ version = "0.1.1"
 description = "Web research and extraction toolkit with MCP and optional autonomous LLM agents"
 readme = "README.md"
 requires-python = ">=3.11"
+license = { text = "MIT" }
+keywords = [
+    "ai-agent",
+    "mcp",
+    "web-search",
+    "web-scraping",
+    "deepseek",
+    "automation",
+    "llm",
+]
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Operating System :: OS Independent",
+    "Topic :: Internet :: WWW/HTTP",
+]
+
+dependencies = [
+    "typer>=0.12",
+    "rich>=13",
+    "httpx>=0.27",
+    "mcp>=1.0",
+    "ddgs",
+    "playwright",
+    "fastapi",
+    "uvicorn",
+    "gradio",
+    "openai",
+]
+
 [project.scripts]
 ohamlab = "ohamlab_cli:app"
 
+[project.urls]
+Homepage = "https://github.com/innokria/ohamlab-plugin"
+Repository = "https://github.com/innokria/ohamlab-plugin"
+Documentation = "https://github.com/innokria/ohamlab-plugin/tree/main/ohamlab-plugin"
+Issues = "https://github.com/innokria/ohamlab-plugin/issues"
+
 [tool.setuptools]
 py-modules = ["ohamlab_cli"]
-packages = ["agent", "browser", "storage", "mcp_server", "mcp_server.tools"]
+packages = [
+    "agent",
+    "browser",
+    "storage",
+    "mcp_server",
+    "mcp_server.tools",
+]
