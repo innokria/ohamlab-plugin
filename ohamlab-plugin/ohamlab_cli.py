@@ -31,6 +31,50 @@ def execute(name, arguments):
     raise ValueError(f"Unknown tool: {name}")
 
 
+@app.command("search")
+def search_command(
+    query: str,
+    max_results: int = typer.Option(
+        5, "--max-results", "-n"
+    ),
+):
+    """Search the web without an LLM."""
+    from ddgs import DDGS
+    import json
+
+    with DDGS() as ddgs:
+        results = list(
+            ddgs.text(
+                query,
+                max_results=max_results
+            )
+        )
+
+    typer.echo(json.dumps(results, indent=2))
+
+@app.command("serve")
+def serve_command():
+    """Start OhamLab's existing web UI and MCP server."""
+    import os
+    import subprocess
+    import sys
+    from pathlib import Path
+
+    project_dir = Path(__file__).resolve().parent
+    storage_dir = project_dir / "storage-data"
+    storage_dir.mkdir(parents=True, exist_ok=True)
+
+    env = os.environ.copy()
+    env.setdefault("OHAM_DATA_DIR", str(storage_dir))
+
+    subprocess.run(
+        [sys.executable, str(project_dir / "app.py")],
+        cwd=project_dir,
+        env=env,
+        check=True,
+    )
+
+
 @app.command()
 def agent(question: str, max_steps: int = 8, json_output: bool = typer.Option(False, "--json")):
     """Run autonomous research with an OpenAI-compatible model."""

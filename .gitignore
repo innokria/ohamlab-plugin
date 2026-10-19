@@ -1,0 +1,24 @@
+
+# macOS
+.DS_Store
+
+# Python cache
+__pycache__/
+*.py[cod]
+
+# Python packaging
+*.egg-info/
+build/
+dist/
+
+# Virtual environments
+.venv/
+venv/
+
+# Local OhamLab data
+storage-data/
+
+# Secrets
+.env
+.env.*
+!.env.example
