@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "ohamlab-agent"
-version = "0.1.1"
+version = "0.1.2"
 description = "Web research and extraction toolkit with MCP and optional autonomous LLM agents"
 readme = "README.md"
 requires-python = ">=3.11"
